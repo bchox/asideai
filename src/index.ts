@@ -13,6 +13,7 @@ import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
+import { ZodError } from "zod";
 import { BrainStore } from "./brain/store.js";
 import {
   TOOL_DEFINITIONS,
@@ -42,27 +43,51 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
 }));
 
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
-  const name = request.params.name;
-  const args = request.params.arguments ?? {};
+  try {
+    const name = request.params.name;
+    const args = request.params.arguments ?? {};
 
-  switch (name) {
-    case "list_projects":
-      return handlers.list_projects(listProjectsSchema.parse(args));
-    case "set_active_project":
-      return handlers.set_active_project(setActiveProjectSchema.parse(args));
-    case "create_project":
-      return handlers.create_project(createProjectSchema.parse(args));
-    case "update_project":
-      return handlers.update_project(updateProjectSchema.parse(args));
-    case "capture":
-      return handlers.capture(captureSchema.parse(args));
-    case "get_active_context":
-      return handlers.get_active_context(getActiveContextSchema.parse(args));
-    default:
+    switch (name) {
+      case "list_projects":
+        return handlers.list_projects(listProjectsSchema.parse(args));
+      case "set_active_project":
+        return handlers.set_active_project(setActiveProjectSchema.parse(args));
+      case "create_project":
+        return handlers.create_project(createProjectSchema.parse(args));
+      case "update_project":
+        return handlers.update_project(updateProjectSchema.parse(args));
+      case "capture":
+        return handlers.capture(captureSchema.parse(args));
+      case "get_active_context":
+        return handlers.get_active_context(getActiveContextSchema.parse(args));
+      default:
+        return {
+          isError: true,
+          content: [{ type: "text", text: JSON.stringify({ error: `Unknown tool: ${name}` }) }],
+        };
+    }
+  } catch (err) {
+    if (err instanceof ZodError) {
+      const issues = err.issues.map((i) => ({
+        path: i.path.join("."),
+        message: i.message,
+        code: i.code,
+      }));
       return {
         isError: true,
-        content: [{ type: "text", text: JSON.stringify({ error: `Unknown tool: ${name}` }) }],
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify({ error: "Invalid arguments", issues }),
+          },
+        ],
       };
+    }
+    const message = err instanceof Error ? err.message : String(err);
+    return {
+      isError: true,
+      content: [{ type: "text", text: JSON.stringify({ error: message }) }],
+    };
   }
 });
 

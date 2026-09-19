@@ -58,17 +58,42 @@ export class BrainStore {
   }
 
   private load(): BrainState {
+    if (!existsSync(this.path)) return emptyState();
+
+    let raw: string;
     try {
-      if (!existsSync(this.path)) return emptyState();
-      const raw = readFileSync(this.path, "utf8");
-      const parsed = JSON.parse(raw) as BrainState;
-      if (!parsed || parsed.version !== 1) return emptyState();
-      parsed.projects ??= {};
-      parsed.captures ??= {};
-      return parsed;
-    } catch {
-      return emptyState();
+      raw = readFileSync(this.path, "utf8");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      throw new Error(`Failed to read brain file at ${this.path}: ${msg}`);
     }
+
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      throw new Error(`Corrupt brain file (invalid JSON): ${this.path}`);
+    }
+
+    if (
+      !parsed ||
+      typeof parsed !== "object" ||
+      (parsed as BrainState).version !== 1
+    ) {
+      throw new Error(
+        `Unsupported or corrupt brain file (expected version 1): ${this.path}`,
+      );
+    }
+
+    const state = parsed as BrainState;
+    state.projects ??= {};
+    state.captures ??= {};
+    return state;
+  }
+
+  /** Re-read brain.json so mutations do not clobber concurrent writers. */
+  reloadFromDisk(): void {
+    this.state = this.load();
   }
 
   private persist(): void {
@@ -148,6 +173,7 @@ export class BrainStore {
   }
 
   setActiveProject(projectId: string): { ok: true; project: { id: string; name: string } } {
+    this.reloadFromDisk();
     const p = this.state.projects[projectId];
     if (!p) throw new Error(`Unknown project_id: ${projectId}`);
     this.state.active_project_id = projectId;
@@ -156,6 +182,7 @@ export class BrainStore {
   }
 
   createProject(input: CreateProjectInput): Project {
+    this.reloadFromDisk();
     const name = input.name.trim();
     if (!name) throw new Error("name is required");
 
@@ -196,6 +223,7 @@ export class BrainStore {
   }
 
   updateProject(input: UpdateProjectInput): Project {
+    this.reloadFromDisk();
     const p = this.state.projects[input.project_id];
     if (!p) throw new Error(`Unknown project_id: ${input.project_id}`);
 
@@ -215,6 +243,7 @@ export class BrainStore {
   }
 
   capture(input: CaptureInput): { id: string; etag: string; item: CaptureItem } {
+    this.reloadFromDisk();
     const projectId = this.resolveProjectId(input.project_id);
     const p = this.state.projects[projectId]!;
 

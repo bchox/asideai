@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, describe, it } from "node:test";
@@ -89,6 +89,26 @@ describe("BrainStore", () => {
     assert.ok(listed.some((p) => p.is_active && p.id === other.id));
     store.setActiveProject("acme-checkout");
   });
+
+  it("load() throws on corrupt JSON", () => {
+    const badPath = join(dir, "corrupt-brain.json");
+    writeFileSync(badPath, "{not-json", "utf8");
+    assert.throws(
+      () => new BrainStore(badPath),
+      (err: unknown) =>
+        err instanceof Error && /corrupt brain file \(invalid JSON\)/i.test(err.message),
+    );
+  });
+
+  it("load() throws on wrong version", () => {
+    const badPath = join(dir, "bad-version-brain.json");
+    writeFileSync(badPath, JSON.stringify({ version: 99, projects: {}, captures: {} }), "utf8");
+    assert.throws(
+      () => new BrainStore(badPath),
+      (err: unknown) =>
+        err instanceof Error && /expected version 1/i.test(err.message),
+    );
+  });
 });
 
 describe("getActiveContext", () => {
@@ -119,7 +139,7 @@ describe("getActiveContext", () => {
     assert.ok(result.injected_summary.includes("Acme Checkout"));
   });
 
-  it("stubs since_etag when provided", () => {
+  it("stubs since_etag when provided and different", () => {
     const store = new BrainStore(brainPath);
     const result = getActiveContext(store, {
       purpose: "handoff",
@@ -128,5 +148,60 @@ describe("getActiveContext", () => {
     });
     assert.equal(result.since_etag_stub, true);
     assert.equal(result.since_etag, "deadbeef");
+    assert.notEqual(result.up_to_date, true);
+  });
+
+  it("returns up_to_date with empty items when since_etag matches", () => {
+    const store = new BrainStore(brainPath);
+    const etag = store.contextEtag("acme-checkout");
+    const result = getActiveContext(store, {
+      purpose: "coding",
+      token_budget: 800,
+      project_id: "acme-checkout",
+      since_etag: etag,
+    });
+    assert.equal(result.up_to_date, true);
+    assert.deepEqual(result.items, []);
+    assert.equal(result.items_included, 0);
+    assert.equal(result.items_omitted, 0);
+    assert.equal(result.context_etag, etag);
+    assert.equal(result.since_etag_stub, undefined);
+    assert.equal(result.project_id, "acme-checkout");
+    assert.match(result.untrusted_notice, /untrusted/i);
+    assert.ok(result.tokens_estimate >= 0);
+  });
+
+  it("filters superseded captures out of the inject pack", () => {
+    const isolated = join(dir, "supersede-brain.json");
+    const store = new BrainStore(isolated);
+    store.createProject({
+      name: "Supersede Demo",
+      project_id: "supersede-demo",
+      brief: "Brief",
+      rules: ["Rule one"],
+    });
+    const old = store.capture({
+      type: "decision",
+      body: "Old decision that will be superseded",
+      title: "Old",
+      project_id: "supersede-demo",
+    });
+    const newer = store.capture({
+      type: "decision",
+      body: "Replacement decision",
+      title: "New",
+      supersedes_id: old.id,
+      project_id: "supersede-demo",
+    });
+
+    const result = getActiveContext(store, {
+      purpose: "coding",
+      token_budget: 2000,
+      project_id: "supersede-demo",
+    });
+
+    const ids = result.items.map((i) => i.id);
+    assert.ok(!ids.includes(old.id), "superseded capture should be excluded");
+    assert.ok(ids.includes(newer.id), "superseding capture should remain");
   });
 });

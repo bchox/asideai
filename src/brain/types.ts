@@ -89,7 +89,9 @@ export interface ActiveContextResult {
   tokens_estimate: number;
   items_included: number;
   items_omitted: number;
-  /** Stub: true when since_etag was provided; full diff not computed in MVP. */
+  /** True when since_etag matched context_etag (no pack needed). */
+  up_to_date?: boolean;
+  /** Stub: true when since_etag was provided but differed; full diff not computed in MVP. */
   since_etag_stub?: boolean;
   since_etag?: string;
   injected_summary: string;

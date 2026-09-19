@@ -22,6 +22,16 @@ function itemText(kind: ContextPackItem["kind"], item: CaptureItem | { text: str
   return `[${kind}] ${item.text}`;
 }
 
+/** Drop captures whose id is referenced as supersedes_id by any peer in the same project. */
+export function filterSuperseded(captures: CaptureItem[]): CaptureItem[] {
+  const supersededIds = new Set(
+    captures
+      .map((c) => c.supersedes_id)
+      .filter((id): id is string => typeof id === "string" && id.length > 0),
+  );
+  return captures.filter((c) => !supersededIds.has(c.id));
+}
+
 /**
  * Pack order by purpose (always rules → brief first when they fit):
  * - coding: rules, brief, recent decisions, recent notes (decisions preferred)
@@ -78,6 +88,24 @@ export function getActiveContext(
   const project = store.getProject(projectId)!;
   const budget = Math.max(64, Math.floor(input.token_budget));
   const etag = store.contextEtag(projectId);
+  const overhead = estimateTokens(UNTRUSTED_NOTICE) + 40;
+
+  // Short-circuit when client already has this pack
+  if (input.since_etag && input.since_etag === etag) {
+    return {
+      project_id: project.id,
+      project_name: project.name,
+      purpose: input.purpose,
+      context_etag: etag,
+      tokens_estimate: overhead,
+      items_included: 0,
+      items_omitted: 0,
+      injected_summary: `${project.name} · up to date`,
+      items: [],
+      untrusted_notice: UNTRUSTED_NOTICE,
+      up_to_date: true,
+    };
+  }
 
   const candidates: ContextPackItem[] = [];
 
@@ -98,7 +126,10 @@ export function getActiveContext(
     });
   }
 
-  const ranked = rankCaptures(input.purpose, project.decisions, project.notes);
+  const activeCaptures = filterSuperseded([...project.decisions, ...project.notes]);
+  const decisions = activeCaptures.filter((c) => c.type === "decision");
+  const notes = activeCaptures.filter((c) => c.type === "note");
+  const ranked = rankCaptures(input.purpose, decisions, notes);
   for (const c of ranked) {
     candidates.push({
       kind: c.type,
@@ -113,8 +144,6 @@ export function getActiveContext(
   let tokens = 0;
   let omitted = 0;
 
-  // Reserve a little for summary + notice overhead
-  const overhead = estimateTokens(UNTRUSTED_NOTICE) + 40;
   let remaining = Math.max(32, budget - overhead);
 
   for (const item of candidates) {
