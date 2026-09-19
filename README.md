@@ -1,2 +1,29 @@
-# asideai
-Shared brain + harness that sits beside ChatGPT, Claude, Codex, Grok, and coding agents — one working identity across every AI.
+# AsideAI
+
+**Internal codename:** Bridge
+
+A shared brain with a harness that sits *beside* ChatGPT, Claude, Codex, Grok, Cursor, and the next model — so switching AIs feels continuous instead of starting over.
+
+> Help me keep one working identity across every AI I use, without living inside a new chat app.
+
+## Status
+
+Early product definition. MVP is locked around **inject → capture → switch → trust**, with **MCP / coding-agent inject** as the first harness surface.
+
+## Docs
+
+- Product source of truth (Confluence): [Bridge — Product source of truth](https://mywai.atlassian.net/wiki/spaces/B/pages/131416/Bridge+Product+source+of+truth)
+- Jira epic: [BRID-1](https://mywai.atlassian.net/browse/BRID-1)
+
+## MVP (locked)
+
+1. One project brain — brief, rules, decisions, notes
+2. MCP tools — `get_active_context`, `list_projects`, `set_active_project`, `capture`
+3. Continuity across two MCP clients in one day
+4. Trust via `injected_summary` (+ optional digest)
+
+Browser companion comes later. AsideAI is not another chatbot.
+
+## License
+
+MIT
