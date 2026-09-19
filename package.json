@@ -1,7 +1,7 @@
 {
   "name": "asideai",
   "version": "0.1.0",
-  "description": "AsideAI — local-first project brain with MCP inject/capture",
+  "description": "AsideAI \u2014 local-first project brain with MCP inject/capture",
   "main": "dist/index.js",
   "directories": {
     "test": "test"
@@ -13,7 +13,12 @@
     "mcp": "node dist/index.js",
     "cli": "node dist/cli.js"
   },
-  "keywords": ["mcp", "asideai", "project-brain", "local-first"],
+  "keywords": [
+    "mcp",
+    "asideai",
+    "project-brain",
+    "local-first"
+  ],
   "author": "Bruce Chocolaad",
   "license": "MIT",
   "type": "module",
